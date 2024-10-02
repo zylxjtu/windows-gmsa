@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -177,6 +178,7 @@ func TestValidateCreateRequest(t *testing.T) {
 }
 
 func TestMutateCreateRequest(t *testing.T) {
+	hostName := dummyPodName
 	for testCaseName, winOptionsFactory := range map[string]func() *corev1.WindowsSecurityContextOptions{
 		"with empty GMSA settings, it passes and does nothing": func() *corev1.WindowsSecurityContextOptions {
 			return &corev1.WindowsSecurityContextOptions{}
@@ -187,13 +189,31 @@ func TestMutateCreateRequest(t *testing.T) {
 	} {
 		t.Run(testCaseName, func(t *testing.T) {
 			webhook := newWebhook(nil)
-			pod := buildPod(dummyServiceAccoutName, winOptionsFactory(), map[string]*corev1.WindowsSecurityContextOptions{dummyContainerName: winOptionsFactory()})
+			pod := buildPodWithHostName(dummyServiceAccoutName, hostName, winOptionsFactory(), map[string]*corev1.WindowsSecurityContextOptions{dummyContainerName: winOptionsFactory()})
 
 			response, err := webhook.mutateCreateRequest(context.Background(), pod)
 			assert.Nil(t, err)
 
 			require.NotNil(t, response)
 			assert.True(t, response.Allowed)
+
+			var patches []map[string]string
+			if err := json.Unmarshal(response.Patch, &patches); assert.Nil(t, err) && assert.Equal(t, 1, len(patches)) {
+				patch := patches[0]
+				expectedPatch := map[string]string{
+					"op":    "replace",
+					"path":  "/spec/hostname",
+					"value": hostName, // hostname is just a prefix here, the actual value has random suffix we can't predict
+				}
+
+				responseHostName := patch["value"]
+				assert.True(t, strings.HasPrefix(responseHostName, hostName[:6]))
+
+				patch["value"] = hostName
+				assert.Equal(t, expectedPatch, patch)
+			}
+			assert.Nil(t, err)
+
 		})
 	}
 

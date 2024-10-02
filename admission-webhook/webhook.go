@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	admissionV1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -359,6 +360,18 @@ func compareCredSpecContents(fromResource, fromCRD string) (bool, error) {
 func (webhook *webhook) mutateCreateRequest(ctx context.Context, pod *corev1.Pod) (*admissionV1.AdmissionResponse, *podAdmissionError) {
 	var patches []map[string]string
 
+	hostName := pod.Spec.Hostname
+	// Patch the hostname only if it is not empty
+	if hostName != "" {
+		// Append a random UUID (8 characters) to the hostname (first 6 characters) to avoid conflicts
+		hostName = hostName[:6] + "-" + generateUUID()
+		patches = append(patches, map[string]string{
+			"op":    "replace",
+			"path":  "/spec/hostname",
+			"value": hostName,
+		})
+	}
+
 	if err := iterateOverWindowsSecurityOptions(pod, func(windowsOptions *corev1.WindowsSecurityContextOptions, resourceKind gmsaResourceKind, resourceName string, containerIndex int) *podAdmissionError {
 		if credSpecName := windowsOptions.GMSACredentialSpecName; credSpecName != nil {
 			// if the user has pre-set the GMSA's contents, we won't override it - it'll be down
@@ -536,4 +549,14 @@ func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
+}
+
+func generateUUID() string {
+	// Generate a new UUID
+	id := uuid.New()
+
+	// Convert to string and get the first 8 characters in lower case
+	shortUUID := strings.ToLower(id.String()[:8])
+
+	return shortUUID
 }

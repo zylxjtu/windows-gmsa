@@ -22,7 +22,6 @@ type dummyKubeClient struct {
 	retrieveCredSpecContentsFunc  func(ctx context.Context, credSpecName string) (contents string, httpCode int, err error)
 }
 
-
 func (dkc *dummyKubeClient) isAuthorizedToUseCredSpec(ctx context.Context, serviceAccountName, namespace, credSpecName string) (authorized bool, reason string) {
 	if dkc.isAuthorizedToUseCredSpecFunc != nil {
 		return dkc.isAuthorizedToUseCredSpecFunc(ctx, serviceAccountName, namespace, credSpecName)
@@ -58,7 +57,7 @@ func setWindowsOptions(winOptions *corev1.WindowsSecurityContextOptions, credSpe
 // `podWindowsOptions` should be either a full `*corev1.WindowsSecurityContextOptions` or a string, in which
 // case a `*corev1.WindowsSecurityContextOptions` is built using that string as the name of the cred spec to use.
 // Same goes for the values of `containerNamesAndWindowsOptions`.
-func buildPod(serviceAccountName string, podWindowsOptions *corev1.WindowsSecurityContextOptions, containerNamesAndWindowsOptions map[string]*corev1.WindowsSecurityContextOptions) *corev1.Pod {
+func buildPodWithHostName(serviceAccountName string, hostName string, podWindowsOptions *corev1.WindowsSecurityContextOptions, containerNamesAndWindowsOptions map[string]*corev1.WindowsSecurityContextOptions) *corev1.Pod {
 	containers := make([]corev1.Container, len(containerNamesAndWindowsOptions))
 	i := 0
 	for name, winOptions := range containerNamesAndWindowsOptions {
@@ -72,6 +71,7 @@ func buildPod(serviceAccountName string, podWindowsOptions *corev1.WindowsSecuri
 	shuffleContainers(containers)
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: serviceAccountName,
+		Hostname:           hostName,
 		Containers:         containers,
 	}
 	if podWindowsOptions != nil {
@@ -82,6 +82,10 @@ func buildPod(serviceAccountName string, podWindowsOptions *corev1.WindowsSecuri
 		ObjectMeta: metav1.ObjectMeta{Name: dummyPodName},
 		Spec:       podSpec,
 	}
+}
+
+func buildPod(serviceAccountName string, podWindowsOptions *corev1.WindowsSecurityContextOptions, containerNamesAndWindowsOptions map[string]*corev1.WindowsSecurityContextOptions) *corev1.Pod {
+	return buildPodWithHostName(serviceAccountName, "", podWindowsOptions, containerNamesAndWindowsOptions)
 }
 
 func shuffleContainers(a []corev1.Container) {
